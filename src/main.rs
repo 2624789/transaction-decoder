@@ -10,9 +10,24 @@ struct Input {
 }
 
 #[derive(Debug, Serialize)]
+struct Output {
+    amount: f64,
+    script_pubkey: String,
+}
+
+#[derive(Debug, Serialize)]
 struct Transaction {
     version: u32,
     inputs: Vec<Input>,
+    outputs: Vec<Output>,
+}
+
+struct Amount(u64);
+
+impl Amount {
+    pub fn to_btc(&self) -> f64 {
+        self.0 as f64 / 100_000_000.0
+    }
 }
 
 fn read_u32(transaction_bytes: &mut &[u8]) -> u32 {
@@ -20,6 +35,13 @@ fn read_u32(transaction_bytes: &mut &[u8]) -> u32 {
     transaction_bytes.read(&mut buffer).unwrap();
     
     u32::from_le_bytes(buffer)
+}
+
+fn read_amount(transaction_bytes: &mut &[u8]) -> Amount {
+    let mut buffer = [0; 8];
+    transaction_bytes.read(&mut buffer).unwrap();
+
+    Amount(u64::from_le_bytes(buffer))
 }
 
 fn read_compact_size(transaction_bytes: &mut &[u8]) -> u64 {
@@ -72,6 +94,7 @@ fn main() {
 
     let version = read_u32(&mut bytes_slice);
 
+    // Read inputs
     let input_length = read_compact_size(&mut bytes_slice);
     let mut inputs = vec![];
 
@@ -89,9 +112,24 @@ fn main() {
         });
     }
 
+    // Read ouputs
+    let output_length = read_compact_size(&mut bytes_slice);
+    let mut outputs = vec![];
+
+    for _ in 0..output_length {
+        let amount = read_amount(&mut bytes_slice).to_btc();
+        let script_pubkey = read_script(&mut bytes_slice);
+
+        outputs.push(Output {
+            amount,
+            script_pubkey,
+        });
+    }
+
     let transaction = Transaction {
         version,
         inputs,
+        outputs,
     };
     println!("Transaction: {}", serde_json::to_string_pretty(&transaction).unwrap());
 }
