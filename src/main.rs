@@ -1,45 +1,7 @@
+mod transaction;
+
 use std::io::Read;
-use serde::{Serialize, Serializer};
-
-#[derive(Debug, Serialize)]
-struct Input {
-    txid: String,
-    output_index: u32,
-    script: String,
-    sequence: u32,
-}
-
-#[derive(Debug, Serialize)]
-struct Output {
-    #[serde(serialize_with = "as_btc")]
-    amount: Amount,
-    script_pubkey: String,
-}
-
-fn as_btc<T: BitcoinValue, S: Serializer>(t: &T, s: S) -> Result<S::Ok, S::Error> {
-    let btc = t.to_btc();
-    s.serialize_f64(btc)
-}
-
-#[derive(Debug, Serialize)]
-struct Transaction {
-    version: u32,
-    inputs: Vec<Input>,
-    outputs: Vec<Output>,
-}
-
-#[derive(Debug)]
-struct Amount(u64);
-
-trait BitcoinValue {
-    fn to_btc(&self) -> f64;
-}
-
-impl BitcoinValue for Amount {
-    fn to_btc(&self) -> f64 {
-        self.0 as f64 / 100_000_000.0
-    }
-}
+use transaction::{Amount, Input, Output, Transaction};
 
 fn read_u32(transaction_bytes: &mut &[u8]) -> u32 {
     let mut buffer = [0; 4];
@@ -52,7 +14,7 @@ fn read_amount(transaction_bytes: &mut &[u8]) -> Amount {
     let mut buffer = [0; 8];
     transaction_bytes.read(&mut buffer).unwrap();
 
-    Amount(u64::from_le_bytes(buffer))
+    Amount::from_sat(u64::from_le_bytes(buffer))
 }
 
 fn read_compact_size(transaction_bytes: &mut &[u8]) -> u64 {
@@ -115,12 +77,7 @@ fn main() {
         let script = read_script(&mut bytes_slice);
         let sequence = read_u32(&mut bytes_slice);
 
-        inputs.push(Input {
-            txid,
-            output_index,
-            script,
-            sequence,
-        });
+        inputs.push(Input::new(txid, output_index, script, sequence));
     }
 
     // Read ouputs
@@ -131,17 +88,10 @@ fn main() {
         let amount = read_amount(&mut bytes_slice);
         let script_pubkey = read_script(&mut bytes_slice);
 
-        outputs.push(Output {
-            amount,
-            script_pubkey,
-        });
+        outputs.push(Output::new(amount, script_pubkey));
     }
 
-    let transaction = Transaction {
-        version,
-        inputs,
-        outputs,
-    };
+    let transaction = Transaction::new(version, inputs, outputs);
     println!("Transaction: {}", serde_json::to_string_pretty(&transaction).unwrap());
 }
 
