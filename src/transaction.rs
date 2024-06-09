@@ -2,14 +2,19 @@ use serde::{Serialize, Serializer};
 
 #[derive(Debug, Serialize)]
 pub struct Input {
-    txid: String,
+    txid: Txid,
     output_index: u32,
     script: String,
     sequence: u32,
 }
 
 impl Input {
-    pub fn new(txid: String, output_index: u32, script: String, sequence: u32) -> Input {
+    pub fn new(
+        txid: Txid,
+        output_index: u32,
+        script: String,
+        sequence: u32
+    ) -> Input {
         Input {
             txid,
             output_index,
@@ -42,18 +47,45 @@ fn as_btc<T: BitcoinValue, S: Serializer>(t: &T, s: S) -> Result<S::Ok, S::Error
 
 #[derive(Debug, Serialize)]
 pub struct Transaction {
+    transaction_id: Txid,
     version: u32,
     inputs: Vec<Input>,
     outputs: Vec<Output>,
+    lock_time: u32,
 }
 
 impl Transaction {
-    pub fn new(version: u32, inputs: Vec<Input>, outputs: Vec<Output>) -> Transaction {
+    pub fn new(
+        transaction_id: Txid,
+        version: u32,
+        inputs: Vec<Input>,
+        outputs: Vec<Output>,
+        lock_time: u32
+    ) -> Transaction {
         Transaction {
+            transaction_id,
             version,
             inputs,
             outputs,
+            lock_time,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Txid([u8; 32]);
+
+impl Txid {
+    pub fn from_bytes(bytes: [u8; 32]) -> Txid {
+        Txid(bytes)
+    }
+}
+
+impl Serialize for Txid {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut bytes = self.0.clone();
+        bytes.reverse();
+        s.serialize_str(&hex::encode(bytes))
     }
 }
 

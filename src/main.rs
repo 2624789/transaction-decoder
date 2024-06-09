@@ -1,7 +1,8 @@
 mod transaction;
 
+use sha2::{Digest, Sha256};
 use std::io::Read;
-use transaction::{Amount, Input, Output, Transaction};
+use transaction::{Amount, Input, Output, Transaction, Txid};
 
 fn read_u32(transaction_bytes: &mut &[u8]) -> u32 {
     let mut buffer = [0; 4];
@@ -46,11 +47,10 @@ fn read_compact_size(transaction_bytes: &mut &[u8]) -> u64 {
     }
 }
 
-fn read_txid(transaction_bytes: &mut &[u8]) -> String {
+fn read_txid(transaction_bytes: &mut &[u8]) -> Txid {
     let mut buffer = [0; 32];
     transaction_bytes.read(&mut buffer).unwrap();
-    buffer.reverse();
-    hex::encode(buffer)
+    Txid::from_bytes(buffer)
 }
 
 fn read_script(transaction_bytes: &mut &[u8]) -> String {
@@ -58,6 +58,16 @@ fn read_script(transaction_bytes: &mut &[u8]) -> String {
     let mut buffer = vec![0_u8; script_size];
     transaction_bytes.read(&mut buffer).unwrap();
     hex::encode(buffer)
+}
+
+fn hash_transaction(raw_transaction: &[u8]) -> Txid {
+    let mut hasher = Sha256::new();
+    hasher.update(&raw_transaction);
+    let hash1 = hasher.finalize();
+    let mut hasher = Sha256::new();
+    hasher.update(hash1);
+    let hash2 = hasher.finalize();
+    Txid::from_bytes(hash2.into())
 }
 
 fn main() {
@@ -91,7 +101,11 @@ fn main() {
         outputs.push(Output::new(amount, script_pubkey));
     }
 
-    let transaction = Transaction::new(version, inputs, outputs);
+    let lock_time = read_u32(&mut bytes_slice);
+
+    let transaction_id = hash_transaction(&transaction_bytes);
+
+    let transaction = Transaction::new(transaction_id, version, inputs, outputs, lock_time);
     println!("Transaction: {}", serde_json::to_string_pretty(&transaction).unwrap());
 }
 
